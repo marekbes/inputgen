@@ -1,3 +1,4 @@
+#include <boost/program_options.hpp>
 #include <fstream>
 #include <iostream>
 #include <random>
@@ -75,13 +76,42 @@ void generateData(long node, long totalNodes, long step,
   file.close();
 }
 
-int main(int argc, const char **argv) {
-  int NodesUsed = 2;
-  if (argc > 1) {
-    NodesUsed = std::stoi(argv[1]);
+int NodesUsed = 2;
+int BatchElementCount = 1024 * 16;
+int BatchCount = 1000;
+
+void parse_args(int argc, const char **argv) {
+  namespace po = boost::program_options;
+  po::options_description desc("Allowed options");
+  desc.add_options()("help", "produce help message")(
+      "batch-size", po::value<int>(), "number of elements in a batch")(
+      "batch-count", po::value<int>(), "number of batches generated per node")(
+      "nodes", po::value<int>(), "NUMA nodes used");
+  po::variables_map vm;
+  po::store(po::parse_command_line(argc, argv, desc), vm);
+  po::notify(vm);
+
+  if (vm.count("help")) {
+    std::cout << desc << "\n";
+    std::exit(1);
   }
-  int BatchElementCount = 1024 * 16;
-  int BatchCount = BatchElementCount * 1000;
+
+  if (vm.count("nodes")) {
+    NodesUsed = vm["nodes"].as<int>();
+  }
+  std::cout << "Number of nodes set to " << NodesUsed << ".\n";
+  if (vm.count("batch-size")) {
+    BatchElementCount = vm["batch-size"].as<int>();
+  }
+  std::cout << "Batch size set to " << BatchElementCount << ".\n";
+  if (vm.count("batch-count")) {
+    BatchCount = vm["batch-count"].as<int>();
+  }
+  std::cout << "Number of batches per node set to " << BatchCount << ".\n";
+}
+
+int main(int argc, const char **argv) {
+  parse_args(argc, argv);
   auto staticData = generateStaticData();
   std::ofstream file("input_" + std::to_string(NodesUsed) + ".dat",
                      std::ifstream::binary);
@@ -90,6 +120,7 @@ int main(int argc, const char **argv) {
   file.write((const char *)&staticData[0], len * sizeof(long));
   file.close();
   for (int i = 0; i < NodesUsed; ++i) {
-    generateData(i, NodesUsed, BatchElementCount, staticData, 1000, BatchCount);
+    generateData(i, NodesUsed, BatchElementCount, staticData, 1000,
+                 BatchCount * BatchElementCount);
   }
 }
